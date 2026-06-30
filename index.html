@@ -4,10 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PPDB PAUD Online - Formulir Pendaftaran</title>
+    <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Library Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-        // JANGAN LUPA GANTI DENGAN URL & KEY SUPABASE MILIKMU SENDIRI
+        // PENTING: Ganti URL & KEY di bawah ini dengan kredensial dari project Supabase milikmu sendiri!
         const SUPABASE_URL = "https://xyz-id-kamu.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...";
         const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -15,6 +17,7 @@
 </head>
 <body class="bg-light">
 
+    <!-- Navbar -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-success shadow-sm">
         <div class="container">
             <a class="navbar-brand fw-bold" href="#">PAUD Sinergi</a>
@@ -27,11 +30,13 @@
         </div>
     </nav>
 
+    <!-- Judul Header -->
     <div class="container my-5 text-center">
         <h1 class="display-5 fw-bold text-success">Penerimaan Siswa Baru (PPDB)</h1>
         <p class="lead text-secondary">Isi formulir pendaftaran di bawah ini secara lengkap.</p>
     </div>
 
+    <!-- Main Form Konten -->
     <div class="container col-md-6 mb-5">
         <div class="card shadow border-0">
             <div class="card-header bg-success text-white py-3">
@@ -58,6 +63,7 @@
                     <button type="submit" id="btnSubmit" class="btn btn-success w-100 py-2 mt-3 fw-bold">Kirim Pendaftaran</button>
                 </form>
 
+                <!-- Tombol Cetak Bukti (Awalnya tersembunyi, otomatis muncul jika sukses daftar) -->
                 <div id="areaCetak" class="mt-4 text-center d-none">
                     <hr>
                     <h5 class="text-success fw-bold">Pendaftaran Berhasil Diterima!</h5>
@@ -71,15 +77,23 @@
         </div>
     </div>
 
+    <!-- Logika JavaScript Sistem -->
     <script>
         // 1. Proteksi Halaman Sesi Login
         async function cekSesi() {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                alert("Sesi tidak ditemukan. Silakan login terlebih dahulu.");
-                window.location.href = "login.html";
-            } else {
-                document.getElementById('user-display').innerText = `Masuk sebagai: ${session.user.email}`;
+            try {
+                const { data: { session }, error } = await supabase.auth.getSession();
+                if (error) throw error;
+                
+                if (!session) {
+                    alert("Sesi tidak ditemukan. Silakan login terlebih dahulu.");
+                    window.location.href = "login.html";
+                } else {
+                    document.getElementById('user-display').innerText = `Masuk sebagai: ${session.user.email}`;
+                }
+            } catch (err) {
+                console.error("Kesalahan Sesi:", err);
+                alert("Gagal memeriksa sesi login. Pastikan URL & API Key Supabase Anda sudah benar.");
             }
         }
         cekSesi();
@@ -97,6 +111,8 @@
         formPendaftaran.addEventListener('submit', async (e) => {
             e.preventDefault();
             const btnSubmit = document.getElementById('btnSubmit');
+            
+            // Mengunci tombol agar tidak diklik dua kali
             btnSubmit.innerText = "Mengirim...";
             btnSubmit.disabled = true;
             
@@ -106,44 +122,62 @@
             const fileInput = document.getElementById('fotoAnak');
             const file = fileInput.files[0];
 
-            if (!file) return alert("Pilih file foto anak terlebih dahulu!");
+            if (!file) {
+                alert("Pilih file foto anak terlebih dahulu!");
+                btnSubmit.innerText = "Kirim Pendaftaran";
+                btnSubmit.disabled = false;
+                return;
+            }
 
-            // Penamaan unik file gambar dengan timestamp
+            // Membuat nama file unik berdasarkan timestamp agar tidak bentrok
             const fileExtension = file.name.split('.').pop();
             const fileName = `${Date.now()}.${fileExtension}`;
             const filePath = `foto/${fileName}`;
 
-            // A. Upload Foto ke Supabase Storage Bucket bernama 'foto-siswa'
-            const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('foto-siswa')
-                .upload(filePath, file);
+            try {
+                // A. Proses Upload Foto ke Supabase Storage Bucket bernama 'foto-siswa'
+                const { data: uploadData, error: uploadError } = await supabase.storage
+                    .from('foto-siswa')
+                    .upload(filePath, file);
 
-            if (uploadError) {
+                if (uploadError) {
+                    throw new Error("Gagal mengunggah foto. Pastikan Nama Bucket Anda di Supabase adalah 'foto-siswa' dan kebijakan aksesnya sudah diatur. Detail: " + uploadError.message);
+                }
+
+                // B. Ambil URL Publik Gambar
+                const { data: urlData } = supabase.storage.from('foto-siswa').getPublicUrl(filePath);
+                const publicUrlImage = urlData.publicUrl;
+
+                // C. Masukkan Data ke Tabel 'pendaftar' di Supabase
+                const { error: insertError } = await supabase
+                    .from('pendaftar')
+                    .insert([
+                        { 
+                            nama_anak: namaAnak, 
+                            tanggal_lahir: tglLahir, 
+                            nama_wali: namaWali, 
+                            foto_url: publicUrlImage, 
+                            status: 'Diproses' 
+                        }
+                    ]);
+
+                if (insertError) {
+                    throw new Error("Gagal menyimpan data ke database. Periksa apakah RLS (Row Level Security) tabel Anda aktif atau ada nama kolom yang tidak sesuai. Detail: " + insertError.message);
+                }
+
+                // Jika semua alur di atas sukses tanpa error
+                alert(`Pendaftaran atas nama ${namaAnak} Berhasil Disimpan!`);
+                document.getElementById('areaCetak').classList.remove('d-none'); // Munculkan tombol cetak PDF
+                
+            } catch (error) {
+                console.error("Proses Submit Gagal:", error);
+                // Menampilkan alert detail kesalahan spesifik agar mudah dideteksi
+                alert("🚨 PENDAFTARAN GAGAL:\n" + error.message);
+            } finally {
+                // Mengembalikan kondisi tombol seperti semula
                 btnSubmit.innerText = "Kirim Pendaftaran";
                 btnSubmit.disabled = false;
-                return alert("Gagal upload gambar: " + uploadError.message);
             }
-
-            // B. Ambil URL Foto Publik yang Sukses Di-upload
-            const { data: urlData } = supabase.storage.from('foto-siswa').getPublicUrl(filePath);
-            const publicUrlImage = urlData.publicUrl;
-
-            // C. Masukkan Data ke Tabel 'pendaftar' di Supabase
-            const { error: insertError } = await supabase
-                .from('pendaftar')
-                .insert([
-                    { nama_anak: namaAnak, tanggal_lahir: tglLahir, nama_wali: namaWali, foto_url: publicUrlImage, status: 'Diproses' }
-                ]);
-
-            if (insertError) {
-                alert("Gagal menyimpan data ke database: " + insertError.message);
-            } else {
-                alert(`Pendaftaran ${namaAnak} Berhasil Disimpan!`);
-                // Munculkan tombol cetak PDF secara otomatis
-                document.getElementById('areaCetak').classList.remove('d-none');
-            }
-            btnSubmit.innerText = "Kirim Pendaftaran";
-            btnSubmit.disabled = false;
         });
 
         // 4. Fungsi Otomatis Cetak Kartu Bukti PDF
