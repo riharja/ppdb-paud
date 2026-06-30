@@ -4,13 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Register Akun PPDB PAUD</title>
-    <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Library Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-        // JANGAN LUPA GANTI DENGAN URL & KEY SUPABASE MILIKMU
-        const SUPABASE_URL = "https://xyz-id-kamu.supabase.co";
+        // PASTIKAN DIGANTI DENGAN URL & KEY SUPABASE MILIKMU SENDIRI
+        const SUPABASE_URL = "https://id-project-kamu.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...";
         const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     </script>
@@ -31,7 +29,7 @@
                         <label class="form-label">Password</label>
                         <input type="password" class="form-control" id="regPassword" placeholder="Minimal 6 karakter" required>
                     </div>
-                    <button type="submit" class="btn btn-success w-100 py-2">Daftar Akun</button>
+                    <button type="submit" id="btnRegister" class="btn btn-success w-100 py-2">Daftar Akun</button>
                 </form>
                 
                 <p class="text-center mt-3 small mb-0">Sudah punya akun? <a href="login.html" class="text-success fw-bold">Login di sini</a></p>
@@ -43,20 +41,28 @@
         const formRegister = document.getElementById('formRegister');
         formRegister.addEventListener('submit', async (e) => {
             e.preventDefault();
+            const btnRegister = document.getElementById('btnRegister');
+            btnRegister.innerText = "Mendaftar...";
+            btnRegister.disabled = true;
+
             const email = document.getElementById('regEmail').value;
             const password = document.getElementById('regPassword').value;
 
-            // Proses Registrasi ke Supabase Auth
-            const { data, error } = await supabase.auth.signUp({
-                email: email,
-                password: password,
-            });
+            try {
+                const { data, error } = await supabase.auth.signUp({
+                    email: email,
+                    password: password,
+                });
 
-            if (error) {
-                alert("Gagal mendaftar: " + error.message);
-            } else {
-                alert("Pendaftaran berhasil! Silakan cek email kamu untuk konfirmasi, lalu silakan Login.");
+                if (error) throw error;
+
+                alert("Pendaftaran berhasil! Silakan cek kotak masuk email kamu untuk konfirmasi, lalu silakan Login.");
                 window.location.href = "login.html";
+            } catch (err) {
+                alert("🚨 PENDAFTARAN GAGAL:\n" + err.message);
+            } finally {
+                btnRegister.innerText = "Daftar Akun";
+                btnRegister.disabled = false;
             }
         });
     </script>
