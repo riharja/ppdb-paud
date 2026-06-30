@@ -7,7 +7,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-        // GANTI DENGAN URL & KEY SUPABASE MILIKMU
+        // JANGAN LUPA GANTI DENGAN URL & KEY SUPABASE MILIKMU SENDIRI
         const SUPABASE_URL = "https://xyz-id-kamu.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...";
         const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -56,11 +56,22 @@
                     </div>
                     <button type="submit" id="btnSubmit" class="btn btn-success w-100 py-2 mt-3 fw-bold">Kirim Pendaftaran</button>
                 </form>
+
+                <div id="areaCetak" class="mt-4 text-center d-none">
+                    <hr>
+                    <h5 class="text-success fw-bold">Pendaftaran Berhasil Diterima!</h5>
+                    <p class="small text-muted">Silakan cetak bukti pendaftaran di bawah ini sebagai tanda bukti fisik.</p>
+                    <button type="button" class="btn btn-primary fw-bold px-4" onclick="cetakKartu()">
+                        🖨️ Cetak Bukti Pendaftaran (PDF)
+                    </button>
+                </div>
+
             </div>
         </div>
     </div>
 
     <script>
+        // 1. Proteksi Halaman Sesi Login
         async function cekSesi() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) {
@@ -72,6 +83,7 @@
         }
         cekSesi();
 
+        // 2. Fitur Logout
         const btnLogout = document.getElementById('btn-logout');
         btnLogout.addEventListener('click', async () => {
             await supabase.auth.signOut();
@@ -79,7 +91,7 @@
             window.location.href = "login.html";
         });
 
-        // Logika kirim pendaftaran & simpan ke database
+        // 3. Simpan Pendaftaran & Upload Gambar ke Supabase
         const formPendaftaran = document.getElementById('formPendaftaran');
         formPendaftaran.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -93,11 +105,14 @@
             const fileInput = document.getElementById('fotoAnak');
             const file = fileInput.files[0];
 
-            // 1. Upload Foto ke Storage
+            if (!file) return alert("Pilih file foto anak terlebih dahulu!");
+
+            // Penamaan unik file gambar dengan timestamp
             const fileExtension = file.name.split('.').pop();
             const fileName = `${Date.now()}.${fileExtension}`;
             const filePath = `foto/${fileName}`;
 
+            // A. Upload Foto ke Supabase Storage Bucket bernama 'foto-siswa'
             const { data: uploadData, error: uploadError } = await supabase.storage
                 .from('foto-siswa')
                 .upload(filePath, file);
@@ -108,11 +123,11 @@
                 return alert("Gagal upload gambar: " + uploadError.message);
             }
 
-            // 2. Ambil URL Foto Publik
+            // B. Ambil URL Foto Publik yang Sukses Di-upload
             const { data: urlData } = supabase.storage.from('foto-siswa').getPublicUrl(filePath);
             const publicUrlImage = urlData.publicUrl;
 
-            // 3. Masukkan Data Teks + URL Foto ke Tabel Pendaftar
+            // C. Masukkan Data ke Tabel 'pendaftar' di Supabase
             const { error: insertError } = await supabase
                 .from('pendaftar')
                 .insert([
@@ -120,14 +135,53 @@
                 ]);
 
             if (insertError) {
-                alert("Gagal menyimpan data teks: " + insertError.message);
+                alert("Gagal menyimpan data ke database: " + insertError.message);
             } else {
                 alert(`Pendaftaran ${namaAnak} Berhasil Disimpan!`);
-                formPendaftaran.reset();
+                // Munculkan tombol cetak PDF secara otomatis
+                document.getElementById('areaCetak').classList.remove('d-none');
             }
             btnSubmit.innerText = "Kirim Pendaftaran";
             btnSubmit.disabled = false;
         });
+
+        // 4. Fungsi Otomatis Cetak Kartu Bukti PDF
+        function cetakKartu() {
+            const nama = document.getElementById('namaAnak').value;
+            const tgl = document.getElementById('tglLahir').value;
+            const wali = document.getElementById('namaWali').value;
+
+            const jendelaCetak = window.open('', '_blank');
+            jendelaCetak.document.write(`
+                <html>
+                <head>
+                    <title>Bukti Pendaftaran - ${nama}</title>
+                    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+                    <style>
+                        body { padding: 40px; font-family: sans-serif; background-color: #fff; }
+                        .kartu { border: 4px dashed #198754; padding: 30px; border-radius: 15px; max-width: 700px; margin: 0 auto; }
+                    </style>
+                </head>
+                <body>
+                    <div class="kartu text-center">
+                        <h2 class="text-success fw-bold mb-1">KARTU BUKTI PENDAFTARAN ONLINE</h2>
+                        <h4 class="text-secondary mb-4">PAUD Sinergi Bangsa</h4>
+                        <hr>
+                        <table class="table table-bordered text-start my-4">
+                            <tr><th width="35%">Nama Calon Siswa</th><td>${nama}</td></tr>
+                            <tr><th>Tanggal Lahir</th><td>${tgl}</td></tr>
+                            <tr><th>Nama Wali / Orang Tua</th><td>${wali}</td></tr>
+                            <tr><th>Status Awal</th><td><b class="text-warning">Diproses (Menunggu Seleksi Admin)</b></td></tr>
+                        </table>
+                        <hr>
+                        <p class="small text-muted">Bawa cetakan bukti pendaftaran ini beserta berkas fisik asli ketika datang melakukan verifikasi ke sekolah.</p>
+                    </div>
+                    <script>window.print();<\/script>
+                </body>
+                </html>
+            `);
+            jendelaCetak.document.close();
+        }
     </script>
 </body>
 </html>
